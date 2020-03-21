@@ -70,9 +70,11 @@ Released 02d/08m/2014
 
 [+] Fixed a potential error issue during process creation.
 
-[+] Added CREATE_NEW_CONSOLE flag to avoid I/O issues when tracing console applications.
+[+] Added CREATE_NEW_CONSOLE flag to avoid I/O issues when tracing console
+    applications.
 
-[+] Fixed a potential invalid pointer dereference issue when parsing a malformed PE file.
+[+] Fixed a potential invalid pointer dereference issue when parsing a malformed
+	PE file.
 
 
 
@@ -627,7 +629,7 @@ Released 31d/10m/2015
     Reported by: @fancy__04
 
 [+] Updated the XOR encoding operator from '^' to 'x'.
-    The original operator was fine when testing this new feature from visual 
+    The original operator was fine when testing this new feature from visual
     studio, but apparently using the '^' character in Windows command prompt
     is really a bad idea. I totally forgot about this since, Visual Studio
     uses the command line as a parameter to CreateProcess(), which in that
@@ -1028,23 +1030,44 @@ Shellter v7.1
 Released 01d/12m/2017
 
 [+] Fixed a bug in the last stage of Stealth Mode.
-    This was due to rarely manifested issue that would cause an ERROR_INVALID_USER_BUFFER
-	Windows error (code: 1784).
+    This was due to rarely manifested issue that would cause an
+	ERROR_INVALID_USER_BUFFER Windows error (code: 1784).
 	
 [+] Fixed a tracer issue in Windows 10.
-    Noticed that in Windows 10 Shellter would detect a few spawned system threads during process
-	initialization. However, because this happens before the actual tracing starts if the user
-	disables tracing of all threads via Manual Mode, or the target is a DLL, and/or DTCK is enabled,
-	then the tracing stage stops before even starting. This happens because in those cases Shellter
-	will stop tracing once an additional thread is created. Since those system threads are irrelevant
-	with Shellter's technical details, the tracer was updated to ignore those system threads on process
-	initialization.	
+    Noticed that in Windows 10 Shellter would detect a few spawned system
+	threads during process initialization. However, because this happens before
+	the actual tracing starts if the user disables tracing of all threads via
+	Manual Mode, or the target is a DLL, and/or DTCK is enabled, then the
+	tracing stage stops before even starting. 
+	This happens because in those cases Shellter will stop tracing once an
+	additional thread is created. Since those system threads are irrelevant
+	with Shellter's technical details, the tracer was updated to ignore those
+	system threads on process initialization.	
 	
 [+] Fixed Windows error codes translation to error messages in Windows 10.
 
 [+] Fixed console and font size adjustment in Windows 10.
 
 [+] Other minor adjustments.
+
+
+
+
+Shellter v7.2
+...............
+
+Released 22d/02m/2020
+
+[+] Added an extra detection method for Wine environment.
+    A recent update in Wine broke the original detection method which is
+	necessary in order for Shellter to operate in 'Wine Mode'.
+	The original detection method still applies in order to maintain
+	compatibility with previous Wine versions.
+	
+[+] Minor update in the tracer.
+
+
+
 	
 	
 

