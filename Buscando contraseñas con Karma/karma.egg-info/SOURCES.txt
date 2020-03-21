@@ -1,0 +1,12 @@
+README.md
+setup.py
+bin/karma
+karma/__init__.py
+karma/banner.py
+karma/core.py
+karma/formatter.py
+karma.egg-info/PKG-INFO
+karma.egg-info/SOURCES.txt
+karma.egg-info/dependency_links.txt
+karma.egg-info/requires.txt
+karma.egg-info/top_level.txt

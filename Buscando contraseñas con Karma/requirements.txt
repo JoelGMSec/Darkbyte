@@ -1,0 +1,4 @@
+pysocks
+texttable
+docopt
+requests

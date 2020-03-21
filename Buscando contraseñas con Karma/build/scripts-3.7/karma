@@ -1,0 +1,108 @@
+#!/usr/bin/python3
+
+import logging
+import json
+import time
+import sys
+
+from pathlib import Path
+
+try:
+    path = str(Path(__file__).resolve().parents[1])
+    sys.path.insert(0, path)
+    
+    from karma import __version__
+    from karma import formatter
+    from karma import core
+    from karma import banner
+    
+except Exception as e:
+    raise e
+
+
+# set logger
+logger = logging.getLogger("Karma")
+logger.setLevel(logging.DEBUG)
+
+logger_ch = logging.StreamHandler()
+logger_ch.setLevel(logging.DEBUG)
+logger_ch.setFormatter(formatter.CustomFormatter())
+
+logger.addHandler(logger_ch)
+
+try:
+    from texttable import Texttable
+    from docopt import docopt
+
+except ModuleNotFoundError as e:
+    logger.error(f"{e}")
+    logger.warn(
+        f"please install the requirements: $ sudo -H pip3 insall -r requirements.txt"
+    )
+    sys.exit(1)
+
+
+usage = f"""Karma v{__version__}
+
+Usage:
+    karma.py target <target> [-o FILENAME] [--proxy=<proxy>]
+    karma.py search <target> (--password | --local-part | --domain) 
+                             [-o FILENAME] [--proxy=<proxy>]
+    karma.py (-h | --help)
+    karma.py --version
+
+Options:
+    -o --output         Save output in json format.
+    --proxy=<proxy>     Set Tor proxy [default: localhost:9050].
+    -h --help           Show this screen.
+    --version           Show version.
+"""
+
+
+def print_result_table(results):
+
+    table = Texttable()
+    table.header(["Email", "Password"])
+    table.set_cols_dtype(["t", "t"])
+    table.set_deco(Texttable.BORDER | Texttable.HEADER | Texttable.VLINES)
+
+    for key in results.keys():
+        email = str(results[key]["email"])
+        passw = str(results[key]["passw"])
+        row = (email, passw)
+        table.add_row(row)
+
+    print(table.draw())
+
+
+def generate_json_file(result, filename):
+
+    if not filename:
+        filename = time.strftime("%d%m%y-%H%M%S")
+    
+    output = json.dumps(result, indent=2)
+    with open(f"{filename}.json", "w") as f:
+        f.write(output)
+
+    logger.info(f"the file {filename}.json was created")
+
+
+if __name__ == "__main__":
+
+    args = docopt(usage, version=__version__)
+    pwndb = core.pwndb(args)
+    banner.print_banner(__version__)
+
+    logger.info("starting search")
+    start_time = time.time()
+
+    results = pwndb.search_info()
+    print_result_table(results)
+    
+    number_results = len(results.keys())
+    end_time = time.time() - start_time
+    logger.info(f"{number_results} results found in {end_time:.2f}s")
+
+    if args["--output"]:
+        filename = args["FILENAME"]
+        generate_json_file(results, filename)
