@@ -6,10 +6,9 @@ The licenses belong to their respective authors, I am not responsible for their 
 
 For more information visit my website: https://darkbyte.net
 
-------------------------------------------------------------------------------------------
 
-Repositorio de herramientas utilizadas en mi blog
+# Support
 
-Las licencias pertenecen a sus respectivos autores, no me hago responsable de su mal uso.
+You can support my work buying me a coffee:
 
-Para más información visiten mi página web: https://darkbyte.net
+[<img width=250 alt="buymeacoffe" src="https://cdn.buymeacoffee.com/buttons/v2/default-blue.png">](https://www.buymeacoffee.com/joelgmsec)
